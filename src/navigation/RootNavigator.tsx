@@ -14,6 +14,7 @@ import { LeaderboardScreen } from '@/screens/LeaderboardScreen';
 import { ProfileScreen } from '@/screens/ProfileScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import { CardCollectionScreen } from '@/screens/CardCollectionScreen';
+import { CampaignScreen } from '@/screens/CampaignScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -77,6 +78,11 @@ export function RootNavigator() {
       <Stack.Screen
         name="CardCollection"
         component={CardCollectionScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Campaign"
+        component={CampaignScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>

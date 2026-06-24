@@ -68,6 +68,8 @@ export function ModeSelectScreen() {
       navigation.navigate('BluetoothLobby');
     } else if (mode === 'online') {
       navigation.navigate('Lobby', { mode });
+    } else if (mode === 'solo') {
+      navigation.navigate('Campaign');
     } else {
       navigation.navigate('Game', { mode, difficulty: 'medium' });
     }

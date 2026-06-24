@@ -23,6 +23,7 @@ export type RootStackParamList = {
   Settings: undefined;
   CardCollection: undefined;
   Tutorial: { step?: number };
+  Campaign: undefined;
 };
 
 export type BottomTabParamList = {

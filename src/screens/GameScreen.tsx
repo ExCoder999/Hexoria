@@ -10,6 +10,7 @@ import type { RootStackParamList } from '@/types/navigation';
 import type { HexTile } from '@/types/game';
 import { hexKey } from '@/utils/hexMath';
 import { useGameStore } from '@/store/gameStore';
+import { useAITurn } from '@/services/ai/useAITurn';
 
 type Route = RouteProp<RootStackParamList, 'Game'>;
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Game'>;
@@ -98,6 +99,9 @@ export function GameScreen() {
     },
     [game, ui, selectTile, expandTerritory]
   );
+
+  // AI takes over player2's turn automatically in solo/campaign mode
+  useAITurn('player2', route.params.difficulty ?? 'medium');
 
   const player = currentPlayer();
 
