@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit -m 'fix: polyfill ReadableStream/WritableStream/TransformStream for socket.io-client in React Native *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(npm --version)",
+      "Bash(which nvm *)",
+      "Read(//Users/work/.nvm/versions/node/**)",
+      "Bash(xcrun simctl *)"
+    ]
+  }
+}

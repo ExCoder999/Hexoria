@@ -1,3 +1,7 @@
 // Polyfills must be first — before any package that references browser globals
 import './src/polyfills';
-import 'expo-router/entry';
+import 'react-native-gesture-handler';
+import { registerRootComponent } from 'expo';
+import App from './App';
+
+registerRootComponent(App);
