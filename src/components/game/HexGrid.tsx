@@ -6,6 +6,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  runOnJS,
 } from 'react-native-reanimated';
 import type { HexTile } from '@/types/game';
 import type { Point } from '@/utils/hexMath';
@@ -66,16 +67,19 @@ export function HexGrid({
       scale.value = Math.min(Math.max(savedScale.value * e.scale, 0.5), 2.5);
     });
 
-  const tapGesture = Gesture.Tap().onEnd((e) => {
-    const adjustedX = (e.x - canvasWidth / 2 - translateX.value) / scale.value + canvasWidth / 2;
-    const adjustedY = (e.y - canvasHeight / 2 - translateY.value) / scale.value + canvasHeight / 2;
-
+  const handleTilePress = useCallback((adjustedX: number, adjustedY: number) => {
     const tappedCoord = pixelToHex({ x: adjustedX, y: adjustedY }, hexSize, origin);
     const key = hexKey(tappedCoord);
     const tile = tiles.find((t) => hexKey(t.coord) === key);
     if (tile) {
       onTilePress(tile);
     }
+  }, [tiles, hexSize, origin, onTilePress]);
+
+  const tapGesture = Gesture.Tap().onEnd((e) => {
+    const adjustedX = (e.x - canvasWidth / 2 - translateX.value) / scale.value + canvasWidth / 2;
+    const adjustedY = (e.y - canvasHeight / 2 - translateY.value) / scale.value + canvasHeight / 2;
+    runOnJS(handleTilePress)(adjustedX, adjustedY);
   });
 
   const composed = Gesture.Race(
