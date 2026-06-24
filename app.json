@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.hexoria.game",
+      "bundleIdentifier": "org.name.Hexoria",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Hexoria uses Bluetooth to connect with nearby players for local multiplayer.",
         "NSBluetoothPeripheralUsageDescription": "Hexoria uses Bluetooth to connect with nearby players for local multiplayer.",
