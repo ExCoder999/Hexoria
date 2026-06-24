@@ -1,248 +1,158 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
-import * as Haptics from 'expo-haptics';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ScreenBase, ResourceBar, NeonButton } from '@/components/ui';
-import { HexGrid, TurnBanner, TerritoryBar } from '@/components/game';
+import { HexGrid, TurnBanner, TerritoryBar, HandTray } from '@/components/game';
 import { Colors, Spacing } from '@/theme';
 import type { RootStackParamList } from '@/types/navigation';
-import type { HexTile, Player } from '@/types/game';
-import {
-  hexKey,
-  generateBoardCoords,
-  hexBFS,
-} from '@/utils/hexMath';
-import { randomTerrain } from '@/utils/terrain';
+import type { HexTile } from '@/types/game';
+import { hexKey } from '@/utils/hexMath';
+import { useGameStore } from '@/store/gameStore';
 
 type Route = RouteProp<RootStackParamList, 'Game'>;
+type Nav = NativeStackNavigationProp<RootStackParamList, 'Game'>;
 
 const PLAYER_COLORS: Record<string, string> = {
   player1: Colors.player.one,
   player2: Colors.player.two,
+  player3: Colors.player.three,
+  player4: Colors.player.four,
 };
-
-function buildInitialBoard(size: 'small' | 'medium' | 'large'): Record<string, HexTile> {
-  const coords = generateBoardCoords(size);
-  const board: Record<string, HexTile> = {};
-  coords.forEach((coord, i) => {
-    const key = hexKey(coord);
-    board[key] = {
-      coord,
-      terrain: randomTerrain(i * 7 + coord.q * 13 + coord.r * 31),
-      ownerId: null,
-      unitId: null,
-      structureId: null,
-      revealed: true,
-    };
-  });
-  return board;
-}
-
-function buildInitialPlayers(): Record<string, Player> {
-  return {
-    player1: {
-      id: 'player1',
-      name: 'You',
-      avatarKey: 'avatar1',
-      isHuman: true,
-      resources: { gold: 10, mana: 5, ore: 3 },
-      hand: [],
-      deck: [],
-      discardPile: [],
-      territoryCount: 0,
-      totalTerritories: 0,
-    },
-    player2: {
-      id: 'player2',
-      name: 'Opponent',
-      avatarKey: 'avatar2',
-      isHuman: false,
-      resources: { gold: 10, mana: 5, ore: 3 },
-      hand: [],
-      deck: [],
-      discardPile: [],
-      territoryCount: 0,
-      totalTerritories: 0,
-    },
-  };
-}
 
 export function GameScreen() {
   const route = useRoute<Route>();
+  const navigation = useNavigation<Nav>();
   const { width, height } = useWindowDimensions();
 
-  const [board, setBoard] = useState<Record<string, HexTile>>(() =>
-    buildInitialBoard('medium')
-  );
-  const [players, setPlayers] = useState<Record<string, Player>>(buildInitialPlayers);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [reachableKeys, setReachableKeys] = useState<Set<string>>(new Set());
-  const [currentPlayerId, setCurrentPlayerId] = useState('player1');
-  const [turn, setTurn] = useState(1);
-  const [showBanner, setShowBanner] = useState(true);
+  const {
+    game,
+    ui,
+    startGame,
+    selectTile,
+    expandTerritory,
+    playCard,
+    endTurn,
+    currentPlayer,
+  } = useGameStore();
 
-  const tiles = useMemo(() => Object.values(board), [board]);
-  const totalTiles = tiles.filter((t) => t.terrain !== 'water').length;
-
+  // Initialize game on mount
   useEffect(() => {
-    setShowBanner(true);
-    const t = setTimeout(() => setShowBanner(false), 2500);
-    return () => clearTimeout(t);
-  }, [currentPlayerId, turn]);
+    startGame(
+      {
+        mode: route.params.mode,
+        playerCount: 2,
+        boardSize: 'medium',
+        aiDifficulty: route.params.difficulty ?? 'medium',
+        winCondition: 'territory',
+        victoryThreshold: 60,
+        fogOfWar: false,
+      },
+      ['You', 'Opponent']
+    );
+  }, []);
+
+  // Navigate to game over when winner decided
+  useEffect(() => {
+    if (game?.winnerId) {
+      navigation.replace('GameOver', {
+        winnerId: game.players[game.winnerId]?.name ?? game.winnerId,
+        playerIds: game.playerOrder,
+        mode: route.params.mode,
+      });
+    }
+  }, [game?.winnerId]);
+
+  const tiles = useMemo(() => Object.values(game?.board ?? {}), [game?.board]);
+  const totalTiles = useMemo(
+    () => tiles.filter((t) => t.terrain !== 'water').length,
+    [tiles]
+  );
 
   const handleTilePress = useCallback(
     (tile: HexTile) => {
+      if (!game) return;
       const key = hexKey(tile.coord);
+      const currentPid = game.currentPlayerId;
 
-      if (selectedKey === key) {
-        setSelectedKey(null);
-        setReachableKeys(new Set());
+      // Move selected unit to reachable tile
+      if (ui.selectedTileKey && ui.reachableKeys.has(key)) {
+        // Import moveUnit from store inline
+        useGameStore.getState().moveUnit(ui.selectedTileKey, key);
         return;
       }
 
-      // Select own unit to show movement range
-      if (tile.ownerId === currentPlayerId && tile.unitId) {
-        setSelectedKey(key);
-        const reachable = hexBFS(tile.coord, 3, (c) => {
-          const t = board[hexKey(c)];
-          return t?.terrain !== 'water';
-        });
-        setReachableKeys(reachable);
-        Haptics.selectionAsync();
+      // Attack enemy unit
+      if (ui.selectedTileKey && ui.attackableKeys.has(key)) {
+        useGameStore.getState().attackUnit(ui.selectedTileKey, key);
         return;
       }
 
-      // Expand territory to adjacent tile
-      if (
-        selectedKey === null &&
-        (tile.ownerId === null || tile.ownerId !== currentPlayerId)
-      ) {
-        const neighbors = Object.values(board).filter(
-          (t) => t.ownerId === currentPlayerId
-        );
-        const isAdjacent = neighbors.some((owned) => {
-          const dist = Math.max(
-            Math.abs(owned.coord.q - tile.coord.q),
-            Math.abs(owned.coord.r - tile.coord.r),
-            Math.abs(owned.coord.s - tile.coord.s)
-          );
-          return dist === 1;
-        });
-
-        const canExpand = isAdjacent || Object.values(board).every((t) => t.ownerId !== currentPlayerId);
-
-        if (canExpand && tile.terrain !== 'water') {
-          setBoard((prev) => ({
-            ...prev,
-            [key]: { ...tile, ownerId: currentPlayerId },
-          }));
-          setPlayers((prev) => ({
-            ...prev,
-            [currentPlayerId]: {
-              ...prev[currentPlayerId],
-              territoryCount: prev[currentPlayerId].territoryCount + 1,
-            },
-          }));
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
+      // Select own tile or expand territory
+      if (tile.ownerId === currentPid || tile.unitId) {
+        selectTile(key);
+      } else {
+        expandTerritory(key);
       }
-
-      // Move unit if reachable
-      if (selectedKey && reachableKeys.has(key) && tile.ownerId !== currentPlayerId) {
-        const sourceTile = board[selectedKey];
-        setBoard((prev) => ({
-          ...prev,
-          [selectedKey]: { ...sourceTile, unitId: null, ownerId: null },
-          [key]: { ...tile, unitId: sourceTile.unitId, ownerId: currentPlayerId },
-        }));
-        setSelectedKey(null);
-        setReachableKeys(new Set());
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        return;
-      }
-
-      setSelectedKey(key);
-      setReachableKeys(new Set());
     },
-    [board, selectedKey, reachableKeys, currentPlayerId]
+    [game, ui, selectTile, expandTerritory]
   );
 
-  const handleEndTurn = useCallback(() => {
-    const nextPlayer = currentPlayerId === 'player1' ? 'player2' : 'player1';
-    setCurrentPlayerId(nextPlayer);
-    setSelectedKey(null);
-    setReachableKeys(new Set());
+  const player = currentPlayer();
 
-    if (nextPlayer === 'player1') {
-      setTurn((t) => t + 1);
-      // Collect resources for both players
-      setPlayers((prev) => {
-        const updated = { ...prev };
-        Object.keys(updated).forEach((pid) => {
-          const p = updated[pid];
-          const goldGain = p.territoryCount;
-          updated[pid] = {
-            ...p,
-            resources: {
-              gold: p.resources.gold + goldGain,
-              mana: p.resources.mana + Math.floor(p.territoryCount / 3),
-              ore: p.resources.ore + Math.floor(p.territoryCount / 5),
-            },
-          };
-        });
-        return updated;
-      });
-    }
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-  }, [currentPlayerId]);
-
-  const currentPlayer = players[currentPlayerId];
-  const highlightedKeys = new Set<string>();
+  if (!game || !player) {
+    return (
+      <ScreenBase>
+        <View style={styles.loading} />
+      </ScreenBase>
+    );
+  }
 
   return (
     <ScreenBase edges={[]} withGradient={false}>
-      {/* HUD top */}
+      {/* HUD */}
       <View style={styles.hud}>
-        <ResourceBar resources={currentPlayer?.resources ?? { gold: 0, mana: 0, ore: 0 }} />
-        <NeonButton
-          label="End Turn"
-          variant="primary"
-          size="sm"
-          onPress={handleEndTurn}
-        />
+        <ResourceBar resources={player.resources} />
+        <NeonButton label="End Turn" variant="primary" size="sm" onPress={endTurn} />
       </View>
 
       {/* Hex Grid */}
       <HexGrid
         tiles={tiles}
-        selectedKey={selectedKey}
-        highlightedKeys={highlightedKeys}
-        reachableKeys={reachableKeys}
+        selectedKey={ui.selectedTileKey}
+        highlightedKeys={new Set()}
+        reachableKeys={ui.reachableKeys}
         playerColors={PLAYER_COLORS}
         onTilePress={handleTilePress}
         canvasWidth={width}
-        canvasHeight={height - 120}
+        canvasHeight={height}
         hexSize={36}
       />
 
       {/* Territory bar */}
       <View style={styles.footer}>
         <TerritoryBar
-          players={Object.values(players)}
+          players={Object.values(game.players)}
           playerColors={PLAYER_COLORS}
           totalTiles={totalTiles}
-          victoryThreshold={60}
+          victoryThreshold={game.settings.victoryThreshold}
         />
       </View>
 
-      {/* Turn banner overlay */}
+      {/* Hand tray (slides up from bottom) */}
+      <HandTray
+        hand={player.hand}
+        resources={player.resources}
+        onPlayCard={(id) => playCard(id)}
+      />
+
+      {/* Turn banner */}
       <TurnBanner
-        playerName={currentPlayer?.name ?? ''}
-        turn={turn}
-        playerColor={PLAYER_COLORS[currentPlayerId] ?? Colors.primary.DEFAULT}
-        visible={showBanner}
+        playerName={player.name}
+        turn={game.currentTurn}
+        playerColor={PLAYER_COLORS[game.currentPlayerId] ?? Colors.primary.DEFAULT}
+        visible={ui.showBanner}
       />
     </ScreenBase>
   );
@@ -261,9 +171,12 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: 'absolute',
-    bottom: Spacing[8],
+    bottom: 220,
     left: Spacing[4],
     right: Spacing[4],
     zIndex: 50,
+  },
+  loading: {
+    flex: 1,
   },
 });
