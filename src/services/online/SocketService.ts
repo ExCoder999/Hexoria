@@ -1,4 +1,6 @@
-import { io, Socket } from 'socket.io-client';
+// socket.io-client is required lazily inside connect() so polyfills in
+// src/polyfills.ts are guaranteed to run first (loaded via index.js).
+import type { Socket } from 'socket.io-client';
 import type { TurnAction, GameState } from '@/types/game';
 
 // Events the client sends to server
@@ -33,6 +35,8 @@ class SocketService {
 
     if (serverUrl) this.serverUrl = serverUrl;
 
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { io } = require('socket.io-client') as typeof import('socket.io-client');
     this.socket = io(this.serverUrl, {
       transports: ['websocket'],
       autoConnect: true,
